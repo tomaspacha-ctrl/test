@@ -32,7 +32,7 @@ function render(){
  for(let ri=0;ri<8;ri++)for(let fi=0;fi<8;fi++){
   const square=files[fi]+ranks[ri],piece=game.get(square),fileIndex="abcdefgh".indexOf(square[0]),rankIndex=Number(square[1]);
   const cell=document.createElement("button");cell.type="button";cell.className="square "+((fileIndex+rankIndex)%2===0?"dark":"light");cell.dataset.square=square;cell.setAttribute("aria-label",square+(piece?", "+(piece.color==="w"?"bílá ":"černá ")+piece.type:""));
-  if(selected===square)cell.classList.add("selected");if(lastMove&&(lastMove.from===square||lastMove.to===square))cell.classList.add("last");if(legalTargets.includes(square))cell.classList.add("legal",piece?"capture":"");
+  if(selected===square)cell.classList.add("selected");if(lastMove&&(lastMove.from===square||lastMove.to===square))cell.classList.add("last");if(legalTargets.includes(square)){cell.classList.add("legal");if(piece)cell.classList.add("capture");}
   if(piece){const span=document.createElement("span");span.className="piece "+(piece.color==="w"?"white-piece":"black-piece");span.textContent=glyphs[piece.color+piece.type];cell.appendChild(span);}
   if(fi===0){const c=document.createElement("span");c.className="coords rank";c.textContent=square[1];cell.appendChild(c);}if(ri===7){const c=document.createElement("span");c.className="coords file";c.textContent=square[0];cell.appendChild(c);}boardEl.appendChild(cell);
  }
