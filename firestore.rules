@@ -1,23 +1,47 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    function validRoom(room) { return room in ['room1', 'room2', 'room3', 'room4', 'room5']; }
+    function validRoom(room) {
+      return room in ['room1', 'room2', 'room3', 'room4', 'room5'];
+    }
+    function validFields(data) {
+      return data.keys().hasOnly(['whiteUid', 'blackUid', 'fen', 'pgn', 'updatedAt']);
+    }
     function participant() {
       return request.auth != null &&
-        (request.auth.uid == resource.data.whiteUid || request.auth.uid == resource.data.blackUid);
+        (request.auth.uid == resource.data.whiteUid ||
+         request.auth.uid == resource.data.blackUid);
     }
     match /rooms/{roomId} {
-      allow get: if validRoom(roomId);
+      allow get: if request.auth != null && validRoom(roomId);
       allow list: if false;
       allow create: if request.auth != null && validRoom(roomId) &&
-        request.resource.data.keys().hasOnly(['whiteUid','blackUid','fen','pgn','updatedAt']) &&
-        request.resource.data.whiteUid == request.auth.uid &&
+        validFields(request.resource.data) &&
+        request.resource.data.whiteUid == null &&
         request.resource.data.blackUid == null;
       allow update: if request.auth != null && validRoom(roomId) &&
-        request.resource.data.keys().hasOnly(['whiteUid','blackUid','fen','pgn','updatedAt']) &&
-        request.resource.data.whiteUid == resource.data.whiteUid &&
-        ((participant() && request.resource.data.blackUid == resource.data.blackUid) ||
-         (resource.data.blackUid == null && request.resource.data.blackUid == request.auth.uid));
+        validFields(request.resource.data) &&
+        (
+          (participant() &&
+           request.resource.data.whiteUid == resource.data.whiteUid &&
+           request.resource.data.blackUid == resource.data.blackUid &&
+           request.resource.data.diff(resource.data).affectedKeys()
+             .hasOnly(['fen', 'pgn', 'updatedAt']))
+          ||
+          (request.resource.data.whiteUid == request.auth.uid &&
+           request.resource.data.diff(resource.data).affectedKeys()
+             .hasOnly(['whiteUid', 'blackUid', 'updatedAt']) &&
+           (request.resource.data.blackUid == resource.data.blackUid ||
+            (resource.data.blackUid == request.auth.uid &&
+             request.resource.data.blackUid == null)))
+          ||
+          (request.resource.data.blackUid == request.auth.uid &&
+           request.resource.data.diff(resource.data).affectedKeys()
+             .hasOnly(['whiteUid', 'blackUid', 'updatedAt']) &&
+           (request.resource.data.whiteUid == resource.data.whiteUid ||
+            (resource.data.whiteUid == request.auth.uid &&
+             request.resource.data.whiteUid == null)))
+        );
       allow delete: if false;
     }
   }
