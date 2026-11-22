@@ -1,23 +1,190 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="cs">
 <head>
-  <meta charset="UTF-8">
+  <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Testovací aplikace</title>
+  <meta name="theme-color" content="#172033">
+  <title>Šachy – testovací aplikace</title>
   <style>
-    body {
-      font-family: system-ui, sans-serif;
-      max-width: 720px;
-      margin: 12vh auto;
-      padding: 0 24px;
-      line-height: 1.6;
-      color: #202124;
-    }
-    h1 { color: #1769aa; }
+    :root { color-scheme: light; font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+    * { box-sizing: border-box; }
+    body { margin: 0; min-height: 100vh; background: #eef1f5; color: #172033; padding: 24px 14px 40px; }
+    main { width: min(100%, 760px); margin: 0 auto; }
+    h1 { margin: 0 0 5px; font-size: clamp(1.6rem, 5vw, 2.2rem); }
+    .sub { margin: 0 0 18px; color: #596579; }
+    .panel { background: white; border-radius: 16px; padding: clamp(12px, 3vw, 22px); box-shadow: 0 8px 28px #1c2a4412; }
+    .status { min-height: 48px; display: flex; align-items: center; gap: 10px; font-weight: 650; margin-bottom: 12px; }
+    .dot { width: 11px; height: 11px; flex: 0 0 11px; border-radius: 50%; background: #16a36a; }
+    .board { width: min(100%, 620px); aspect-ratio: 1; display: grid; grid-template-columns: repeat(8, 1fr); margin: 0 auto; border: 5px solid #283449; border-radius: 5px; overflow: hidden; }
+    .square { border: 0; padding: 0; min-width: 0; position: relative; display: grid; place-items: center; cursor: pointer; aspect-ratio: 1; }
+    .light { background: #f0d9b5; } .dark { background: #b58863; }
+    .square.selected { box-shadow: inset 0 0 0 5px #f6d64a; }
+    .square.last { background-image: linear-gradient(#f6e45a66, #f6e45a66); }
+    .piece { font-family: "Segoe UI Symbol", "Noto Sans Symbols 2", serif; font-size: clamp(27px, 8vw, 62px); line-height: 1; user-select: none; pointer-events: none; }
+    .white-piece { color: #fffdf5; text-shadow: 0 1px 2px #222, 1px 1px 1px #222, -1px -1px 1px #555; }
+    .black-piece { color: #20232b; text-shadow: 0 1px 1px #fff8; }
+    .square.legal::after { content: ""; width: 23%; height: 23%; border-radius: 50%; background: #176b42aa; position: absolute; }
+    .square.legal.capture::after { width: 82%; height: 82%; background: transparent; border: 5px solid #176b42aa; }
+    .coords { position: absolute; font-size: 10px; font-weight: 700; opacity: .75; pointer-events: none; }
+    .rank { top: 2px; left: 4px; } .file { bottom: 1px; right: 4px; }
+    .controls { display: flex; flex-wrap: wrap; gap: 9px; margin-top: 16px; }
+    button.action { border: 0; border-radius: 9px; padding: 10px 16px; font: inherit; font-weight: 650; cursor: pointer; background: #24344f; color: white; }
+    button.action.secondary { background: #e8edf4; color: #24344f; }
+    button:disabled { opacity: .42; cursor: not-allowed; }
+    .below { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 18px; }
+    .info { background: #f5f7fa; border-radius: 11px; padding: 12px; min-width: 0; }
+    .info h2 { font-size: .95rem; margin: 0 0 8px; }
+    .moves { min-height: 44px; max-height: 160px; overflow: auto; font-variant-numeric: tabular-nums; font-size: .92rem; line-height: 1.8; }
+    .move-no { color: #778195; padding-right: 5px; }
+    .hint { color: #657187; font-size: .86rem; margin: 12px 0 0; }
+    .promotion { display: none; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 12px; }
+    .promotion.show { display: flex; }
+    .promotion button { font-size: 1.8rem; width: 48px; height: 48px; border: 1px solid #cbd3df; background: white; border-radius: 8px; cursor: pointer; }
+    @media (max-width: 520px) { body { padding: 14px 8px 28px; } .below { grid-template-columns: 1fr; } .board { border-width: 3px; } }
   </style>
 </head>
 <body>
-  <h1>Ahoj!</h1>
-  <p>Testovací webová aplikace funguje.</p>
+<main>
+  <h1>Šachy</h1>
+  <p class="sub">Jednoduchá šachová hra pro dva hráče na jednom zařízení.</p>
+  <section class="panel">
+    <div class="status" aria-live="polite"><span class="dot" id="dot"></span><span id="status">Načítám šachovnici…</span></div>
+    <div class="board" id="board" role="group" aria-label="Šachovnice"></div>
+    <div class="promotion" id="promotion" aria-label="Výběr proměny pěšce">
+      <strong>Proměnit pěšce na:</strong>
+    </div>
+    <div class="controls">
+      <button class="action" id="reset">Nová hra / Reset</button>
+      <button class="action secondary" id="undo">Zpět tah</button>
+      <button class="action secondary" id="flip">Otočit šachovnici</button>
+    </div>
+    <div class="below">
+      <div class="info"><h2>Provedené tahy</h2><div class="moves" id="moves">Zatím žádné tahy.</div></div>
+      <div class="info"><h2>Ovládání</h2><div class="moves" style="font-variant-numeric:normal">Vyber figurku kliknutím a potom klikni na zvýrazněné cílové pole. Hra hlídá legální tahy, šach, mat, pat i rošádu.</div></div>
+    </div>
+    <p class="hint">Tip: tlačítko „Zpět tah“ vrátí poslední půltah. Reset začne novou partii v základním postavení.</p>
+  </section>
+</main>
+<script type="module">
+  import { Chess } from "https://cdn.jsdelivr.net/npm/chess.js@1.4.0/+esm";
+
+  const game = new Chess();
+  const boardEl = document.getElementById("board");
+  const statusEl = document.getElementById("status");
+  const movesEl = document.getElementById("moves");
+  const undoBtn = document.getElementById("undo");
+  const promotionEl = document.getElementById("promotion");
+  const glyphs = {
+    wk:"♔", wq:"♕", wr:"♖", wb:"♗", wn:"♘", wp:"♙",
+    bk:"♚", bq:"♛", br:"♜", bb:"♝", bn:"♞", bp:"♟︎"
+  };
+  let selected = null;
+  let legalTargets = [];
+  let flipped = false;
+  let lastMove = null;
+
+  function statusText() {
+    if (game.isCheckmate()) return "Šachmat – " + (game.turn() === "w" ? "černý" : "bílý") + " vyhrává.";
+    if (game.isStalemate()) return "Pat – remíza.";
+    if (game.isThreefoldRepetition()) return "Remíza – trojí opakování pozice.";
+    if (game.isInsufficientMaterial()) return "Remíza – nedostatečný materiál.";
+    if (game.isDraw()) return "Remíza.";
+    return (game.turn() === "w" ? "Bílý" : "Černý") + " je na tahu" + (game.isCheck() ? " – šach!" : ".");
+  }
+
+  function render() {
+    boardEl.innerHTML = "";
+    const files = flipped ? "hgfedcba" : "abcdefgh";
+    const ranks = flipped ? "12345678" : "87654321";
+    for (let ri = 0; ri < 8; ri++) {
+      for (let fi = 0; fi < 8; fi++) {
+        const square = files[fi] + ranks[ri];
+        const piece = game.get(square);
+        const fileIndex = "abcdefgh".indexOf(square[0]);
+        const rankIndex = Number(square[1]);
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "square " + ((fileIndex + rankIndex) % 2 === 0 ? "light" : "dark");
+        button.setAttribute("aria-label", square + (piece ? ", " + (piece.color === "w" ? "bílá " : "černá ") + piece.type : ""));
+        if (selected === square) button.classList.add("selected");
+        if (lastMove && (lastMove.from === square || lastMove.to === square)) button.classList.add("last");
+        if (legalTargets.includes(square)) button.classList.add("legal", piece ? "capture" : "");
+        if (piece) {
+          const span = document.createElement("span");
+          span.className = "piece " + (piece.color === "w" ? "white-piece" : "black-piece");
+          span.textContent = glyphs[piece.color + piece.type];
+          button.appendChild(span);
+        }
+        if (fi === 0) {
+          const coord = document.createElement("span"); coord.className = "coords rank"; coord.textContent = square[1]; button.appendChild(coord);
+        }
+        if (ri === 7) {
+          const coord = document.createElement("span"); coord.className = "coords file"; coord.textContent = square[0]; button.appendChild(coord);
+        }
+        button.addEventListener("click", () => onSquare(square));
+        boardEl.appendChild(button);
+      }
+    }
+    statusEl.textContent = statusText();
+    document.getElementById("dot").style.background = game.isCheckmate() ? "#d64545" : game.isCheck() ? "#e5a000" : "#16a36a";
+    undoBtn.disabled = game.history().length === 0;
+    const history = game.history();
+    if (!history.length) movesEl.textContent = "Zatím žádné tahy.";
+    else {
+      movesEl.innerHTML = "";
+      for (let i = 0; i < history.length; i += 2) {
+        const row = document.createElement("div");
+        const no = document.createElement("span"); no.className = "move-no"; no.textContent = (i / 2 + 1) + ".";
+        row.append(no, document.createTextNode(history[i] + (history[i + 1] ? "   " + history[i + 1] : "")));
+        movesEl.appendChild(row);
+      }
+      movesEl.scrollTop = movesEl.scrollHeight;
+    }
+  }
+
+  function clearSelection() {
+    selected = null; legalTargets = [];
+  }
+  function choosePromotion(from, to, choices) {
+    promotionEl.innerHTML = "<strong>Proměnit pěšce na:</strong>";
+    for (const type of ["q", "r", "b", "n"]) {
+      const option = document.createElement("button");
+      option.type = "button";
+      option.textContent = glyphs[game.turn() + type];
+      option.setAttribute("aria-label", ({q:"Dáma",r:"Věž",b:"Střelec",n:"Jezdec"})[type]);
+      option.addEventListener("click", () => {
+        game.move({ from, to, promotion: type });
+        lastMove = {from, to}; clearSelection(); promotionEl.classList.remove("show"); render();
+      });
+      promotionEl.appendChild(option);
+    }
+    promotionEl.classList.add("show");
+  }
+  function onSquare(square) {
+    if (game.isGameOver()) return;
+    if (selected && legalTargets.includes(square)) {
+      const choices = game.moves({ square: selected, verbose: true }).filter(m => m.to === square);
+      if (choices.some(m => m.promotion)) { choosePromotion(selected, square, choices); return; }
+      game.move({ from: selected, to: square });
+      lastMove = {from: selected, to: square}; clearSelection(); render(); return;
+    }
+    const piece = game.get(square);
+    if (piece && piece.color === game.turn()) {
+      selected = square;
+      legalTargets = game.moves({ square, verbose: true }).map(m => m.to);
+    } else clearSelection();
+    promotionEl.classList.remove("show");
+    render();
+  }
+
+  document.getElementById("reset").addEventListener("click", () => {
+    game.reset(); clearSelection(); lastMove = null; promotionEl.classList.remove("show"); render();
+  });
+  document.getElementById("undo").addEventListener("click", () => {
+    game.undo(); clearSelection(); lastMove = null; promotionEl.classList.remove("show"); render();
+  });
+  document.getElementById("flip").addEventListener("click", () => { flipped = !flipped; render(); });
+  render();
+</script>
 </body>
 </html>
